@@ -5,6 +5,7 @@ use solana_program::program::invoke_signed;
 use crate::instruction::SolanaClickerInstructions;
 use crate::state::UserState;
 use crate::types::USER_STATE_SEED;
+use crate::error::ClickerError;
 
 pub struct Processor {}
 
@@ -22,7 +23,7 @@ impl Processor {
             SolanaClickerInstructions::InitUser => {
                 msg!("Instruction: Init user start");
                 let user = next_account_info(accounts_iter)?;
-                let clicker_ai = next_account_info(accounts_iter)?;
+                let user_state_ai = next_account_info(accounts_iter)?;
                 let system_program = next_account_info(accounts_iter)?;
 
                 let user_state_space = UserState { click_balance: 0, value_per_click: 1, cost_to_upgrade_v1: 10, cost_to_upgrade_v2: 20 };
@@ -32,21 +33,21 @@ impl Processor {
                 invoke_signed(
                     &system_instruction::create_account(
                         user.key,
-                        clicker_ai.key,
+                        user_state_ai.key,
                         Rent::get()?.minimum_balance(space),
                         space as u64,
                         program_id,
                     ),
-                    &[user.clone(), clicker_ai.clone(), system_program.clone()],
+                    &[user.clone(), user_state_ai.clone(), system_program.clone()],
                     &[&[user.key.as_ref(), USER_STATE_SEED.as_bytes(), &[bump]]],
                 )?;
 
-                let mut user_state: UserState = UserState::try_from_slice(&clicker_ai.data.borrow())?;
+                let mut user_state: UserState = UserState::try_from_slice(&user_state_ai.data.borrow())?;
                 user_state.click_balance = 0;
                 user_state.value_per_click = 1;
                 user_state.cost_to_upgrade_v1 = 10;
                 user_state.cost_to_upgrade_v2 = 20;
-                user_state.serialize(&mut *clicker_ai.data.borrow_mut())?;
+                user_state.serialize(&mut *user_state_ai.data.borrow_mut())?;
                 msg!("Instruction: Init user done");
             }
             SolanaClickerInstructions::Click => {
@@ -65,10 +66,18 @@ impl Processor {
                 let mut user_state: UserState = UserState::try_from_slice(&user_state_account.data.borrow())?;
                 match variation {
                     0 => {
+                        if user_state.cost_to_upgrade_v1 as u64 > user_state.click_balance {
+                            return Err(ClickerError::NotEnoughToUpgrade.into())
+                        }
+                        user_state.click_balance -= user_state.cost_to_upgrade_v1 as u64;
                         user_state.value_per_click += 1;
                         user_state.cost_to_upgrade_v1 *= 2;
                     }
                     1 => {
+                        if user_state.cost_to_upgrade_v2 as u64 > user_state.click_balance {
+                            return Err(ClickerError::NotEnoughToUpgrade.into())
+                        }
+                        user_state.click_balance -= user_state.cost_to_upgrade_v2 as u64;
                         user_state.value_per_click += 2;
                         user_state.cost_to_upgrade_v2 *= 2;
                     }
@@ -76,6 +85,28 @@ impl Processor {
                 }
                 user_state.serialize(&mut *user_state_account.data.borrow_mut())?;
                 msg!("Instruction: UpgradeValuePerClick done");
+            }
+            SolanaClickerInstructions::TransferClicks { value } => {
+                msg!("Instruction: TransferClicks started {:?}", value);
+                let user = next_account_info(accounts_iter)?;
+                let user_state_account = next_account_info(accounts_iter)?;
+                let user_to_transfer = next_account_info(accounts_iter)?;
+                let user_to_transfer_state_account = next_account_info(accounts_iter)?;
+
+                let mut user_state: UserState = UserState::try_from_slice(&user_state_account.data.borrow())?;
+                let mut user_to_transfer_state: UserState = UserState::try_from_slice(&user_to_transfer_state_account.data.borrow())?;
+
+                if value > user_state.click_balance {
+                    return Err(ClickerError::NotEnoughToTransfer.into())
+                }
+
+                user_state.click_balance -= value;
+                user_state.value_per_click += 1;
+                user_to_transfer_state.click_balance += value;
+
+                user_state.serialize(&mut *user_state_account.data.borrow_mut())?;
+                user_to_transfer_state.serialize(&mut *user_to_transfer_state_account.data.borrow_mut())?;
+                msg!("Instruction: TransferClicks done");
             }
         }
         Ok(())

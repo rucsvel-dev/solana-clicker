@@ -8,7 +8,7 @@ pub struct UserState {
     pub click_balance: u64,
     pub value_per_click: u32,
     pub cost_to_upgrade_v1: u32,
-    pub cost_to_upgrade_v2: u32
+    pub cost_to_upgrade_v2: u32,
 }
 
 impl UserState {

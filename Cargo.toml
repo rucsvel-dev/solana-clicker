@@ -1,6 +1,6 @@
 [package]
 name = "solana_program"
-version = "0.1.0"
+version = "0.1.2"
 edition = "2021"
 
 [features]
@@ -10,6 +10,7 @@ no-entrypoint = []
 borsh = "0.9.3"
 borsh-derive = "0.9.1"
 solana-program = "~1.8.14"
+thiserror = "1"
 
 [dev-dependencies]
 solana-program-test = "~1.8.14"

@@ -4,5 +4,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 pub enum SolanaClickerInstructions {
     InitUser,
     Click,
-    UpgradeValuePerClick { variation: u8 }
+    UpgradeValuePerClick { variation: u8 },
+    TransferClicks { value: u64 }
 }
